@@ -1,14 +1,17 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:get/get.dart';
 import 'package:stategetx/models/credit_card.dart';
 import 'package:stategetx/models/credit_score_snapshot.dart';
+import 'package:stategetx/services/api_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 
 class CreditCardRepository extends GetxService {
-  static const String _storageKey = 'credit_cards';
-  static const String _scoreHistoryStorageKey = 'credit_card_score_history';
+  static const String _legacyStorageKey = 'credit_cards';
+  static const String _legacyScoreHistoryStorageKey = 'credit_card_score_history';
 
+  late final ApiService _apiService;
   late final StorageService _storageService;
 
   final RxList<CreditCardModel> cards = <CreditCardModel>[].obs;
@@ -17,63 +20,65 @@ class CreditCardRepository extends GetxService {
   @override
   void onInit() {
     super.onInit();
+    _apiService = Get.find<ApiService>();
     _storageService = Get.find<StorageService>();
     loadCards();
   }
 
   Future<void> loadCards() async {
     await _loadScoreHistory();
-    final rawValue = _storageService.getValue<String>(_storageKey);
-    if (rawValue == null || rawValue.isEmpty) {
-      cards.assignAll(_defaultCards());
-      await _persist();
-      await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
-      return;
-    }
 
-    final decoded = jsonDecode(rawValue);
-    if (decoded is! List) {
-      cards.assignAll(_defaultCards());
-      await _persist();
-      await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
-      return;
-    }
+    try {
+      final response = await _apiService.get(ApiConstants.creditCards);
+      final decoded = response.data;
+      if (decoded is! List) {
+        cards.clear();
+      } else {
+        cards.assignAll(
+          decoded
+              .whereType<Map>()
+              .map(
+                (json) => CreditCardModel.fromJson(
+                  Map<String, dynamic>.from(json),
+                ),
+              )
+              .toList(),
+        );
+      }
 
-    cards.assignAll(
-      decoded
-          .whereType<Map>()
-          .map(
-            (json) => CreditCardModel.fromJson(Map<String, dynamic>.from(json)),
-          )
-          .toList(),
-    );
-    await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
+      if (cards.isEmpty) {
+        await _migrateLegacyCardsIfNeeded();
+      } else {
+        await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
+      }
+    } catch (_) {
+      await _loadLegacyCardsFallback();
+      await _loadLegacyScoreHistoryFallback();
+    }
   }
 
-  Future<void> addCard(CreditCardModel card) async {
-    cards.add(card);
-    await _persist();
-  }
+  Future<void> addCard(CreditCardModel card) => saveCard(card);
 
   Future<void> saveCard(CreditCardModel card) async {
-    final index = cards.indexWhere((item) => item.id == card.id);
+    final response = await _apiService.post(
+      ApiConstants.creditCards,
+      data: card.toJson(),
+    );
+    final saved = CreditCardModel.fromJson(
+      Map<String, dynamic>.from(response.data),
+    );
+    final index = cards.indexWhere((item) => item.id == saved.id);
     if (index == -1) {
-      cards.add(card);
+      cards.add(saved);
     } else {
-      cards[index] = card;
+      cards[index] = saved;
     }
-    await _persist();
     await _recordScoreSnapshotIfNeeded();
   }
 
-  Future<void> addInstallment(
-    String cardId,
-    InstallmentPlan installment,
-  ) async {
+  Future<void> addInstallment(String cardId, InstallmentPlan installment) async {
     final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final card = cards[index];
     final updatedInstallments = List<InstallmentPlan>.from(card.installments)
@@ -82,24 +87,20 @@ class CreditCardRepository extends GetxService {
     updatedInstallments.sort(
       (left, right) => left.firstPaymentDate.compareTo(right.firstPaymentDate),
     );
-    cards[index] = card.copyWith(installments: updatedInstallments);
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
+    await saveCard(card.copyWith(installments: updatedInstallments));
   }
 
   Future<void> deleteInstallment(String cardId, String installmentId) async {
     final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final card = cards[index];
-    cards[index] = card.copyWith(
-      installments: List<InstallmentPlan>.from(card.installments)
-        ..removeWhere((item) => item.id == installmentId),
+    await saveCard(
+      card.copyWith(
+        installments: List<InstallmentPlan>.from(card.installments)
+          ..removeWhere((item) => item.id == installmentId),
+      ),
     );
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
   }
 
   Future<void> addFuturePeriodPayment(
@@ -107,113 +108,67 @@ class CreditCardRepository extends GetxService {
     FuturePeriodPayment payment,
   ) async {
     final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final card = cards[index];
-    cards[index] = card.copyWith(
-      futurePeriodPayments: [...card.futurePeriodPayments, payment],
+    await saveCard(
+      card.copyWith(
+        futurePeriodPayments: [...card.futurePeriodPayments, payment],
+      ),
     );
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
   }
 
   Future<void> adjustAvailableLimit(String cardId, double delta) async {
     final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final card = cards[index];
     final nextAvailableLimit = (card.availableLimit + delta).clamp(
       0,
       card.limit,
     );
-    cards[index] = card.copyWith(availableLimit: nextAvailableLimit.toDouble());
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
+    await saveCard(
+      card.copyWith(availableLimit: nextAvailableLimit.toDouble()),
+    );
   }
 
-  /// Kredi kartından alışveriş yaptığında limitten düş ve borca ekle
   Future<void> chargeCardPurchase(String cardId, double amount) async {
-    final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
-
-    final card = cards[index];
-    // Limit'ten düş (mevcut borcu artır)
-    final newAvailableLimit = (card.availableLimit - amount).clamp(
-      0,
-      card.limit,
-    );
-
-    cards[index] = card.copyWith(availableLimit: newAvailableLimit.toDouble());
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
+    await adjustAvailableLimit(cardId, -amount);
   }
 
-  /// Kart borcunun ödendiğinde limitini artır
   Future<void> payCardDebt(String cardId, double paymentAmount) async {
-    final index = cards.indexWhere((card) => card.id == cardId);
-    if (index == -1) {
-      return;
-    }
-
-    final card = cards[index];
-    // Ödenen tutarı limite ekle (mevcut borcu azalt)
-    final newAvailableLimit = (card.availableLimit + paymentAmount).clamp(
-      0,
-      card.limit,
-    );
-
-    cards[index] = card.copyWith(availableLimit: newAvailableLimit.toDouble());
-    await _persist();
-    await _recordScoreSnapshotIfNeeded();
+    await adjustAvailableLimit(cardId, paymentAmount);
   }
 
   Future<void> deleteCard(String id) async {
+    await _apiService.delete('${ApiConstants.creditCards}/$id');
     cards.removeWhere((item) => item.id == id);
-    await _persist();
     await _recordScoreSnapshotIfNeeded();
   }
 
-  Future<void> _persist() async {
-    final encoded = jsonEncode(cards.map((item) => item.toJson()).toList());
-    await _storageService.setValue<String>(_storageKey, encoded);
-  }
-
   Future<void> _loadScoreHistory() async {
-    final rawValue = _storageService.getValue<String>(_scoreHistoryStorageKey);
-    if (rawValue == null || rawValue.isEmpty) {
+    try {
+      final response = await _apiService.get(ApiConstants.creditCardScoreHistory);
+      final decoded = response.data;
+      if (decoded is! List) {
+        scoreHistory.clear();
+        return;
+      }
+
+      scoreHistory.assignAll(
+        decoded
+            .whereType<Map>()
+            .map(
+              (json) => CreditScoreSnapshot.fromJson(
+                Map<String, dynamic>.from(json),
+              ),
+            )
+            .toList()
+          ..sort((left, right) => right.createdAt.compareTo(left.createdAt)),
+      );
+    } catch (_) {
       scoreHistory.clear();
-      return;
     }
-
-    final decoded = jsonDecode(rawValue);
-    if (decoded is! List) {
-      scoreHistory.clear();
-      return;
-    }
-
-    scoreHistory.assignAll(
-      decoded
-          .whereType<Map>()
-          .map(
-            (json) =>
-                CreditScoreSnapshot.fromJson(Map<String, dynamic>.from(json)),
-          )
-          .toList()
-        ..sort((left, right) => right.createdAt.compareTo(left.createdAt)),
-    );
-  }
-
-  Future<void> _persistScoreHistory() async {
-    final encoded = jsonEncode(
-      scoreHistory.map((item) => item.toJson()).toList(),
-    );
-    await _storageService.setValue<String>(_scoreHistoryStorageKey, encoded);
   }
 
   Future<void> _recordScoreSnapshotIfNeeded({bool forceIfEmpty = false}) async {
@@ -237,9 +192,7 @@ class CreditCardRepository extends GetxService {
         last.availableLimit == totalAvailableLimit &&
         last.currentStatementDebt == currentStatementDebt;
 
-    if (shouldSkip) {
-      return;
-    }
+    if (shouldSkip) return;
 
     final snapshot = CreditScoreSnapshot(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -254,16 +207,92 @@ class CreditCardRepository extends GetxService {
     if (scoreHistory.length > 24) {
       scoreHistory.removeRange(24, scoreHistory.length);
     }
-    await _persistScoreHistory();
+
+    try {
+      await _apiService.post(
+        ApiConstants.creditCardScoreHistory,
+        data: snapshot.toJson(),
+      );
+    } on DioException {
+      // Ignore transient sync failures; in-memory score remains usable.
+    }
   }
 
   int _creditScore(double totalLimit, double currentStatementDebt) {
-    if (totalLimit <= 0) {
-      return 100;
-    }
+    if (totalLimit <= 0) return 100;
     final ratio = (currentStatementDebt / totalLimit).clamp(0, 1);
-    final score = (100 - (ratio * 100)).round();
-    return score.clamp(0, 100).toInt();
+    return (100 - (ratio * 100)).round().clamp(0, 100).toInt();
+  }
+
+  Future<void> _migrateLegacyCardsIfNeeded() async {
+    final rawValue = _storageService.getValue<String>(_legacyStorageKey);
+    final migratedCards = _decodeCards(rawValue);
+    final cardsToSeed = migratedCards.isNotEmpty ? migratedCards : _defaultCards();
+
+    for (final card in cardsToSeed) {
+      await _apiService.post(ApiConstants.creditCards, data: card.toJson());
+    }
+
+    final rawScores = _storageService.getValue<String>(
+      _legacyScoreHistoryStorageKey,
+    );
+    final migratedScores = _decodeScores(rawScores);
+    for (final item in migratedScores) {
+      await _apiService.post(
+        ApiConstants.creditCardScoreHistory,
+        data: item.toJson(),
+      );
+    }
+
+    cards.assignAll(cardsToSeed);
+    if (migratedScores.isNotEmpty) {
+      scoreHistory.assignAll(migratedScores);
+    }
+    await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
+  }
+
+  Future<void> _loadLegacyCardsFallback() async {
+    final decoded = _decodeCards(_storageService.getValue<String>(_legacyStorageKey));
+    if (decoded.isEmpty) {
+      cards.assignAll(_defaultCards());
+    } else {
+      cards.assignAll(decoded);
+    }
+    await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
+  }
+
+  Future<void> _loadLegacyScoreHistoryFallback() async {
+    final decoded = _decodeScores(
+      _storageService.getValue<String>(_legacyScoreHistoryStorageKey),
+    );
+    if (decoded.isNotEmpty) {
+      scoreHistory.assignAll(decoded);
+    }
+  }
+
+  List<CreditCardModel> _decodeCards(String? rawValue) {
+    if (rawValue == null || rawValue.isEmpty) return <CreditCardModel>[];
+    final decoded = jsonDecode(rawValue);
+    if (decoded is! List) return <CreditCardModel>[];
+    return decoded
+        .whereType<Map>()
+        .map((json) => CreditCardModel.fromJson(Map<String, dynamic>.from(json)))
+        .toList();
+  }
+
+  List<CreditScoreSnapshot> _decodeScores(String? rawValue) {
+    if (rawValue == null || rawValue.isEmpty) return <CreditScoreSnapshot>[];
+    final decoded = jsonDecode(rawValue);
+    if (decoded is! List) return <CreditScoreSnapshot>[];
+    return decoded
+        .whereType<Map>()
+        .map(
+          (json) => CreditScoreSnapshot.fromJson(
+            Map<String, dynamic>.from(json),
+          ),
+        )
+        .toList()
+      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
   }
 
   List<CreditCardModel> _defaultCards() {

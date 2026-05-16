@@ -45,6 +45,10 @@ abstract class ApiConstants {
 
   static const String categories = "/categories";
   static const String transactions = "/transactions";
+  static const String creditCards = "/credit-cards";
+  static const String creditCardScoreHistory = "/credit-cards/score-history";
+  static const String investments = "/investments";
+  static const String recurringTransactions = "/recurring-transactions";
 }
 
 class ApiService extends GetxService {

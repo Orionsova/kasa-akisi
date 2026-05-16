@@ -18,7 +18,7 @@ categoriesRouter.use(requireAuth);
 
 categoriesRouter.get('/', async (req, res) => {
   await ensureSystemCategories();
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
 
   const categories = await prisma.category.findMany({
     where: {
@@ -31,7 +31,7 @@ categoriesRouter.get('/', async (req, res) => {
 });
 
 categoriesRouter.post('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = categorySchema.parse(req.body);
 
   const category = await prisma.category.create({
@@ -48,7 +48,7 @@ categoriesRouter.post('/', async (req, res) => {
 });
 
 categoriesRouter.put('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = categorySchema.parse(req.body);
 
   const category = await prisma.category.findUnique({
@@ -72,7 +72,7 @@ categoriesRouter.put('/:id', async (req, res) => {
 });
 
 categoriesRouter.delete('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
 
   const category = await prisma.category.findUnique({
     where: { id: req.params.id },

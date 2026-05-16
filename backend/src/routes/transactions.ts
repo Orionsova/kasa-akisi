@@ -20,7 +20,7 @@ const transactionSchema = z.object({
 transactionsRouter.use(requireAuth);
 
 transactionsRouter.get('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const transactions = await prisma.transaction.findMany({
     where: { userId: authedReq.userId },
     orderBy: { date: 'desc' },
@@ -30,7 +30,7 @@ transactionsRouter.get('/', async (req, res) => {
 });
 
 transactionsRouter.post('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = transactionSchema.parse(req.body);
 
   const transaction = await prisma.transaction.create({
@@ -53,7 +53,7 @@ transactionsRouter.post('/', async (req, res) => {
 });
 
 transactionsRouter.delete('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const transaction = await prisma.transaction.findUnique({
     where: { id: req.params.id },
   });

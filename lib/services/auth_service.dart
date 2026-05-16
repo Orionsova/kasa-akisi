@@ -78,6 +78,76 @@ class AuthService extends GetxService {
     return null;
   }
 
+  Future<AppUser?> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        ApiConstants.login,
+        data: {
+          'email': email.trim().toLowerCase(),
+          'password': password,
+        },
+      );
+      return _persistAuthenticatedUser(response);
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(
+          e.response?.data is Map<String, dynamic>
+              ? (e.response?.data['message']?.toString() ??
+                    'Giriş yapılamadı')
+              : 'Giriş yapılamadı',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<AppUser?> registerWithEmail({
+    required String email,
+    required String password,
+    String? firstName,
+    String? lastName,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        ApiConstants.register,
+        data: {
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'firstName': firstName?.trim().isEmpty == true ? null : firstName?.trim(),
+          'lastName': lastName?.trim().isEmpty == true ? null : lastName?.trim(),
+        },
+      );
+      return _persistAuthenticatedUser(response);
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(
+          e.response?.data is Map<String, dynamic>
+              ? (e.response?.data['message']?.toString() ??
+                    'Kayıt oluşturulamadı')
+              : 'Kayıt oluşturulamadı',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<AppUser?> _persistAuthenticatedUser(Response response) async {
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      return null;
+    }
+
+    await _storageService.setValue<String>(
+      StorageKeys.userToken,
+      response.data['token'],
+    );
+    final user = AppUser.fromJson(response.data['user']);
+    currentUser.value = user;
+    return user;
+  }
+
   Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();

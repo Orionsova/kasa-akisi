@@ -58,53 +58,184 @@ class LoginPage extends GetView<LoginController> {
                   ),
                 ),
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
+                Obx(
+                  () => Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Güvenli giriş',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Google hesabını kullanarak hızlı şekilde devam et.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.72),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: controller.googleIleGirisYap,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF0F172A),
-                            padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          controller.isRegisterMode.value
+                              ? 'Hesap oluştur'
+                              : 'Güvenli giriş',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
                           ),
-                          icon: const Icon(Icons.login_rounded),
-                          label: const Text('Google ile giriş yap'),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        Text(
+                          controller.isRegisterMode.value
+                              ? 'E-posta ve şifre ile kendi hesabını oluştur.'
+                              : 'E-posta, şifre veya Google hesabınla devam et.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        if (controller.isRegisterMode.value) ...[
+                          _LoginField(
+                            controller: controller.firstNameController,
+                            hintText: 'Ad',
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 12),
+                          _LoginField(
+                            controller: controller.lastNameController,
+                            hintText: 'Soyad',
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        _LoginField(
+                          controller: controller.emailController,
+                          hintText: 'E-posta',
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 12),
+                        _LoginField(
+                          controller: controller.passwordController,
+                          hintText: 'Şifre',
+                          obscureText: true,
+                          textInputAction: TextInputAction.done,
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                controller.isLoading
+                                    ? null
+                                    : controller.submitEmailAuth,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF0F172A),
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                            ),
+                            icon:
+                                controller.isLoading
+                                    ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Icon(Icons.mail_rounded),
+                            label: Text(
+                              controller.isRegisterMode.value
+                                  ? 'Hesap oluştur'
+                                  : 'Giriş yap',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                controller.isLoading
+                                    ? null
+                                    : controller.googleIleGirisYap,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.18),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            icon: const Icon(Icons.login_rounded),
+                            label: const Text('Google ile giriş yap'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Center(
+                          child: TextButton(
+                            onPressed:
+                                controller.isLoading
+                                    ? null
+                                    : controller.toggleMode,
+                            child: Text(
+                              controller.isRegisterMode.value
+                                  ? 'Zaten hesabın var mı? Giriş yap'
+                                  : 'Hesabın yok mu? Kayıt ol',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.86),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginField extends StatelessWidget {
+  const _LoginField({
+    required this.controller,
+    required this.hintText,
+    this.keyboardType,
+    this.textInputAction,
+    this.obscureText = false,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final bool obscureText;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      obscureText: obscureText,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.48)),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.08),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
         ),
       ),
     );

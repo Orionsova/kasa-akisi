@@ -4,10 +4,6 @@ import { env } from '../config/env.js';
 const client = new OAuth2Client(env.GOOGLE_CLIENT_ID || undefined);
 
 export async function verifyGoogleIdToken(idToken: string) {
-  if (!env.GOOGLE_CLIENT_ID) {
-    throw new Error('GOOGLE_CLIENT_ID is not configured');
-  }
-
   const ticket = await client.verifyIdToken({
     idToken,
     audience: env.GOOGLE_CLIENT_ID,

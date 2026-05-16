@@ -32,12 +32,18 @@ class AuthService extends GetxService {
       if (googleUser == null) return null; // Kullanıcı giriş yapmayı iptal etti
 
       final googleAuthentication = await googleUser.authentication;
+      final idToken = googleAuthentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception(
+          'Google kimlik doğrulama anahtarı alınamadı. Google yapılandırmasını kontrol et.',
+        );
+      }
       debugPrint("Google User ${googleUser.toString()}");
-      debugPrint("Google Auth ${googleAuthentication.idToken}");
+      debugPrint("Google Auth $idToken");
 
       final response = await _apiService.post(
         ApiConstants.googleLogin,
-        data: {'idToken': googleAuthentication.idToken},
+        data: {'idToken': idToken},
       );
       if (response.statusCode == 200) {
         await _storageService.setValue<String>(
@@ -60,7 +66,14 @@ class AuthService extends GetxService {
       if (e is DioException) {
         debugPrint('DioException status: ${e.response?.statusCode}');
         debugPrint('DioException data: ${e.response?.data}');
+        throw Exception(
+          e.response?.data is Map<String, dynamic>
+              ? (e.response?.data['message']?.toString() ??
+                    'Google ile giriş yapılamadı')
+              : 'Google ile giriş yapılamadı',
+        );
       }
+      if (e is Exception) rethrow;
     }
     return null;
   }

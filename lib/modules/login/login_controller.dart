@@ -13,11 +13,16 @@ class LoginController extends BaseController {
   }
 
   Future<void> googleIleGirisYap() async {
-    final user = await _authService.signInWithGoogle();
-    if (user != null) {
-      Get.offAllNamed(AppRoutes.home);
-    } else {
+    try {
+      final user = await _authService.signInWithGoogle();
+      if (user != null) {
+        Get.offAllNamed(AppRoutes.home);
+        return;
+      }
+
       Get.snackbar('Giriş Hatası', 'Google ile giriş yapılamadı');
+    } catch (e) {
+      Get.snackbar('Giriş Hatası', e.toString().replaceFirst('Exception: ', ''));
     }
   }
 }

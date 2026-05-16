@@ -14,19 +14,27 @@ const defaults = [
 
 export async function ensureSystemCategories() {
   for (const item of defaults) {
-    await prisma.category.upsert({
+    const existing = await prisma.category.findFirst({
       where: {
-        name_type_userId: {
-          name: item.name,
-          type: item.type,
-          userId: null,
+        name: item.name,
+        type: item.type,
+        userId: null,
+      },
+    });
+
+    if (existing) {
+      await prisma.category.update({
+        where: { id: existing.id },
+        data: {
+          icon: item.icon,
+          isSystem: true,
         },
-      },
-      update: {
-        icon: item.icon,
-        isSystem: true,
-      },
-      create: {
+      });
+      continue;
+    }
+
+    await prisma.category.create({
+      data: {
         name: item.name,
         type: item.type,
         icon: item.icon,

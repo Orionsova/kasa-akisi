@@ -14,6 +14,7 @@ class LoginController extends BaseController {
   final firstNameController = TextEditingController();
   final lastNameController = TextEditingController();
   final passwordError = RxnString();
+  final formError = RxnString();
 
   @override
   void onInit() {
@@ -36,20 +37,23 @@ class LoginController extends BaseController {
   void toggleMode() {
     isRegisterMode.value = !isRegisterMode.value;
     passwordError.value = null;
+    formError.value = null;
   }
 
   Future<void> submitEmailAuth() async {
     final email = emailController.text.trim();
     final password = passwordController.text;
+    formError.value = null;
 
     if (email.isEmpty || password.isEmpty) {
-      Get.snackbar('Eksik Bilgi', 'E-posta ve şifre alanlarını doldur.');
+      formError.value = 'E-posta ve şifre alanlarını doldur.';
       return;
     }
 
     if (isRegisterMode.value && !_isStrongPassword(password)) {
       passwordError.value =
           'Şifre en az 8 karakter olmalı ve büyük/küçük harf içermeli.';
+      formError.value = 'Şifre kuralları sağlanmadan hesap oluşturulamaz.';
       return;
     }
 
@@ -80,7 +84,7 @@ class LoginController extends BaseController {
             : 'Giriş yapılamadı',
       );
     } catch (e) {
-      Get.snackbar('İşlem Başarısız', e.toString().replaceFirst('Exception: ', ''));
+      formError.value = e.toString().replaceFirst('Exception: ', '');
     } finally {
       setLoading(false);
     }

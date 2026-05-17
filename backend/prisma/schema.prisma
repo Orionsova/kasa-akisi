@@ -31,10 +31,6 @@ model User {
   updatedAt      DateTime      @updatedAt
   transactions   Transaction[]
   categories     Category[]
-  creditCards    CreditCard[]
-  investments    Investment[]
-  recurringItems RecurringTransaction[]
-  creditScores   CreditScoreSnapshot[]
 }
 
 model Category {
@@ -67,76 +63,4 @@ model Transaction {
   updatedAt      DateTime @updatedAt
 
   @@index([userId, date])
-}
-
-model CreditCard {
-  id                    String   @id
-  name                  String
-  lastFourDigits        String   @default("")
-  cardholderNameOverride String?
-  isActive              Boolean  @default(true)
-  limit                 Decimal  @db.Decimal(12, 2)
-  availableLimit        Decimal  @db.Decimal(12, 2)
-  dueDay                Int
-  statementDay          Int
-  paymentGraceDays      Int      @default(10)
-  colorHex              String   @default("graphite_metal")
-  shapeKey              String   @default("diagonal_gloss")
-  installments          Json     @default("[]")
-  futurePeriodPayments  Json     @default("[]")
-  userId                String
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@index([userId, name])
-}
-
-model CreditScoreSnapshot {
-  id                   String   @id
-  score                Int
-  totalLimit           Decimal  @db.Decimal(12, 2)
-  availableLimit       Decimal  @db.Decimal(12, 2)
-  currentStatementDebt Decimal  @db.Decimal(12, 2)
-  userId               String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt            DateTime @default(now())
-
-  @@index([userId, createdAt])
-}
-
-model Investment {
-  id           String   @id
-  title        String
-  type         String
-  principal    Decimal  @db.Decimal(12, 2)
-  currentValue Decimal  @db.Decimal(12, 2)
-  maturityRate Decimal? @db.Decimal(8, 2)
-  monthlyYield Decimal? @db.Decimal(12, 2)
-  symbol       String?
-  note         String?
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([userId, type])
-}
-
-model RecurringTransaction {
-  id             String   @id
-  title          String
-  category       String
-  amount         Decimal  @db.Decimal(12, 2)
-  dayOfMonth     Int
-  isIncome       Boolean  @default(false)
-  isSubscription Boolean  @default(false)
-  note           String?
-  startDate      DateTime
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([userId, dayOfMonth])
 }

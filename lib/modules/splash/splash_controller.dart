@@ -15,6 +15,7 @@ class SplashController extends BaseController {
 
   Future<void> checkTokenAndRedirect() async {
     await waitForServices();
+    _warmUpBackend();
     final authService = Get.find<AuthService>();
     if (authService.hasStoredToken) {
       final pinService = Get.find<PinService>();
@@ -33,5 +34,10 @@ class SplashController extends BaseController {
         !Get.isRegistered<PinService>()) {
       await Future.delayed(const Duration(milliseconds: 100));
     }
+  }
+
+  void _warmUpBackend() {
+    final apiService = Get.find<ApiService>();
+    Future<void>.microtask(apiService.warmUpBackend);
   }
 }

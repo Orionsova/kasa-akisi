@@ -8,15 +8,9 @@ import { verifyGoogleIdToken } from '../lib/google.js';
 
 export const authRouter = Router();
 
-const passwordSchema = z
-  .string()
-  .min(8, 'Şifre en az 8 karakter olmalı')
-  .regex(/[A-Z]/, 'Şifre en az bir büyük harf içermeli')
-  .regex(/[a-z]/, 'Şifre en az bir küçük harf içermeli');
-
 const registerSchema = z.object({
   email: z.string().email(),
-  password: passwordSchema,
+  password: z.string().min(6),
   firstName: z.string().trim().optional(),
   lastName: z.string().trim().optional(),
 });

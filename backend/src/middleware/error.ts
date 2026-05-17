@@ -12,13 +12,9 @@ export function errorHandler(
   _next: NextFunction,
 ) {
   if (error instanceof ZodError) {
-    const flattened = error.flatten().fieldErrors;
-    const firstFieldError = Object.values(flattened)
-      .flat()
-      .find((message): message is string => Boolean(message && message.length));
     return res.status(400).json({
-      message: firstFieldError ?? 'Validation error',
-      errors: flattened,
+      message: 'Validation error',
+      errors: error.flatten().fieldErrors,
     });
   }
 

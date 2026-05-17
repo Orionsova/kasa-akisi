@@ -9,22 +9,14 @@ abstract final class AppRuntimeConfig {
       String.fromEnvironment('API_BASE_URL', defaultValue: '');
   static const String _googleServerClientIdOverride =
       String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
+  static const String _productionApiBaseUrl =
+      'https://kasa-akisi-backend.onrender.com/api';
 
   static String get apiBaseUrl {
     if (_apiBaseUrlOverride.trim().isNotEmpty) {
       return _apiBaseUrlOverride.trim();
     }
-
-    if (kIsWeb) {
-      return 'http://localhost:4000/api';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:4000/api';
-      default:
-        return 'http://localhost:4000/api';
-    }
+    return _productionApiBaseUrl;
   }
 
   static String get googleServerClientId {
@@ -37,6 +29,7 @@ abstract final class AppRuntimeConfig {
 }
 
 abstract class ApiConstants {
+  static const String health = "/health";
   static const String login = "/auth/login";
   static const String register = "/auth/register";
   static const String googleLogin = "/auth/google";
@@ -84,6 +77,20 @@ class ApiService extends GetxService {
       ),
     );
     return this;
+  }
+
+  Future<void> warmUpBackend() async {
+    try {
+      await _dio.get(
+        ApiConstants.health,
+        options: Options(
+          sendTimeout: const Duration(seconds: 4),
+          receiveTimeout: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Backend warm-up skipped: $e');
+    }
   }
 
   Future<Response> get(

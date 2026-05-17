@@ -232,6 +232,16 @@ class LoginPage extends GetView<LoginController> {
                                             ),
                                           ),
                                         ],
+                                        Obx(() {
+                                          final message = controller.formError.value;
+                                          if (message == null || message.isEmpty) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 10),
+                                            child: _AuthErrorCard(message: message),
+                                          );
+                                        }),
                                         const SizedBox(height: 18),
                                         SizedBox(
                                           width: double.infinity,
@@ -387,6 +397,49 @@ class _PasswordRuleCard extends StatelessWidget {
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthErrorCard extends StatelessWidget {
+  const _AuthErrorCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7F1D1D).withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFCA5A5).withValues(alpha: 0.28),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFFEE2E2),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFFFEE2E2),
+                fontSize: 12.8,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
               ),
             ),
           ),

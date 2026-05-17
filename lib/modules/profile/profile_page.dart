@@ -9,66 +9,76 @@ class ProfilePage extends GetView<ProfileController> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final user = controller.user.value;
-    final photoUrl = user?.profilePhoto ?? '';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF111827), Color(0xFF1D4ED8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return Obx(() {
+      final user = controller.user.value;
+      final photoUrl = user?.profilePhoto ?? '';
+
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF111827), Color(0xFF1D4ED8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(28),
               ),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 42,
-                  backgroundColor: Colors.white.withValues(alpha: 0.16),
-                  backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                  child: photoUrl.isEmpty
-                      ? const Icon(Icons.person_rounded, color: Colors.white, size: 36)
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim().isEmpty
-                      ? 'Profil'
-                      : '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim(),
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 42,
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    backgroundImage:
+                        photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                    child:
+                        photoUrl.isEmpty
+                            ? const Icon(
+                              Icons.person_rounded,
+                              color: Colors.white,
+                              size: 36,
+                            )
+                            : null,
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  user?.email ?? 'Hesap bilgisi bulunamadı',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.82),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim().isEmpty
+                        ? 'Profil'
+                        : '${user?.firstName ?? ''} ${user?.lastName ?? ''}'
+                            .trim(),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Text(
+                    user?.email ?? 'Hesap bilgisi bulunamadı',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          InfoCard(title: 'Ad', value: user?.firstName ?? '-'),
-          InfoCard(title: 'Soyad', value: user?.lastName ?? '-'),
-          InfoCard(title: 'E-posta', value: user?.email ?? '-'),
-          const SizedBox(height: 8),
-          SettingsCard(controller: controller),
-          const SizedBox(height: 12),
-          LogoutCard(controller: controller),
-        ],
-      ),
-    );
+            const SizedBox(height: 16),
+            InfoCard(title: 'Ad', value: user?.firstName ?? '-'),
+            InfoCard(title: 'Soyad', value: user?.lastName ?? '-'),
+            InfoCard(title: 'E-posta', value: user?.email ?? '-'),
+            const SizedBox(height: 8),
+            SettingsCard(controller: controller),
+            const SizedBox(height: 12),
+            LogoutCard(controller: controller),
+          ],
+        ),
+      );
+    });
   }
 }
 

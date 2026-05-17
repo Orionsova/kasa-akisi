@@ -4,6 +4,7 @@ import 'package:get/get_navigation/src/extension_navigation.dart';
 import 'package:stategetx/models/app_user.dart';
 import 'package:stategetx/routes/app_pages.dart';
 import 'package:stategetx/services/api_service.dart';
+import 'package:stategetx/services/pin_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:dio/dio.dart';
@@ -66,12 +67,7 @@ class AuthService extends GetxService {
       if (e is DioException) {
         debugPrint('DioException status: ${e.response?.statusCode}');
         debugPrint('DioException data: ${e.response?.data}');
-        throw Exception(
-          e.response?.data is Map<String, dynamic>
-              ? (e.response?.data['message']?.toString() ??
-                    'Google ile giriş yapılamadı')
-              : 'Google ile giriş yapılamadı',
-        );
+        throw Exception(_humanizeDioException(e, fallback: 'Google ile giriş yapılamadı'));
       }
       if (e is Exception) rethrow;
     }
@@ -93,12 +89,7 @@ class AuthService extends GetxService {
       return _persistAuthenticatedUser(response);
     } catch (e) {
       if (e is DioException) {
-        throw Exception(
-          e.response?.data is Map<String, dynamic>
-              ? (e.response?.data['message']?.toString() ??
-                    'Giriş yapılamadı')
-              : 'Giriş yapılamadı',
-        );
+        throw Exception(_humanizeDioException(e, fallback: 'Giriş yapılamadı'));
       }
       rethrow;
     }
@@ -123,15 +114,40 @@ class AuthService extends GetxService {
       return _persistAuthenticatedUser(response);
     } catch (e) {
       if (e is DioException) {
-        throw Exception(
-          e.response?.data is Map<String, dynamic>
-              ? (e.response?.data['message']?.toString() ??
-                    'Kayıt oluşturulamadı')
-              : 'Kayıt oluşturulamadı',
-        );
+        throw Exception(_humanizeDioException(e, fallback: 'Kayıt oluşturulamadı'));
       }
       rethrow;
     }
+  }
+
+  String _humanizeDioException(
+    DioException exception, {
+    required String fallback,
+  }) {
+    final data = exception.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message']?.toString().trim();
+      if (message != null && message.isNotEmpty) {
+        return message;
+      }
+    }
+
+    if (exception.type == DioExceptionType.connectionTimeout ||
+        exception.type == DioExceptionType.receiveTimeout ||
+        exception.type == DioExceptionType.sendTimeout) {
+      return 'Sunucu zaman aşımına uğradı. Birkaç saniye sonra tekrar dene.';
+    }
+
+    if (exception.type == DioExceptionType.connectionError) {
+      return 'Sunucuya bağlanılamadı. İnternetini veya backend bağlantısını kontrol et.';
+    }
+
+    final statusCode = exception.response?.statusCode;
+    if (statusCode != null) {
+      return '$fallback (kod: $statusCode)';
+    }
+
+    return fallback;
   }
 
   Future<AppUser?> _persistAuthenticatedUser(Response response) async {
@@ -152,6 +168,10 @@ class AuthService extends GetxService {
     try {
       await _googleSignIn.signOut();
       await _storageService.remove(StorageKeys.userToken);
+      if (Get.isRegistered<PinService>()) {
+        await Get.find<PinService>().clearPin();
+      }
+      currentUser.value = null;
     } catch (e) {
       debugPrint("Çıkış yaparken hata oluştu: $e");
     }

@@ -6,6 +6,7 @@ import 'package:stategetx/repositoryies/recurring_transaction_repository.dart';
 import 'package:stategetx/repositoryies/transaction_repository.dart';
 import 'package:stategetx/services/api_service.dart';
 import 'package:stategetx/services/auth_service.dart';
+import 'package:stategetx/services/pin_service.dart';
 import 'package:stategetx/services/privacy_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 import 'package:stategetx/services/theme_service.dart';
@@ -33,6 +34,12 @@ class AppBindings extends Bindings {
 
     await Get.putAsync<AuthService>(() async {
       final service = AuthService();
+      await service.init();
+      return service;
+    });
+
+    await Get.putAsync<PinService>(() async {
+      final service = PinService();
       await service.init();
       return service;
     });

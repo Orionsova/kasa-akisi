@@ -22,7 +22,7 @@ const recurringSchema = z.object({
 recurringTransactionsRouter.use(requireAuth);
 
 recurringTransactionsRouter.get('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const items = await prisma.recurringTransaction.findMany({
     where: { userId: authedReq.userId },
     orderBy: [{ dayOfMonth: 'asc' }, { updatedAt: 'desc' }],
@@ -32,7 +32,7 @@ recurringTransactionsRouter.get('/', async (req, res) => {
 });
 
 recurringTransactionsRouter.post('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = recurringSchema.parse(req.body);
   const itemId = input.id ?? `rec_${crypto.randomUUID()}`;
   const existing = await prisma.recurringTransaction.findUnique({
@@ -73,7 +73,7 @@ recurringTransactionsRouter.post('/', async (req, res) => {
 });
 
 recurringTransactionsRouter.delete('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const item = await prisma.recurringTransaction.findUnique({
     where: { id: req.params.id },
   });

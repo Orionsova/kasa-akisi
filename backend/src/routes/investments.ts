@@ -24,7 +24,7 @@ const investmentSchema = z.object({
 investmentsRouter.use(requireAuth);
 
 investmentsRouter.get('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const items = await prisma.investment.findMany({
     where: { userId: authedReq.userId },
     orderBy: { updatedAt: 'desc' },
@@ -34,7 +34,7 @@ investmentsRouter.get('/', async (req, res) => {
 });
 
 investmentsRouter.post('/', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = investmentSchema.parse(req.body);
   const investmentId = input.id ?? `inv_${crypto.randomUUID()}`;
   const existing = await prisma.investment.findUnique({
@@ -75,7 +75,7 @@ investmentsRouter.post('/', async (req, res) => {
 });
 
 investmentsRouter.delete('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const item = await prisma.investment.findUnique({ where: { id: req.params.id } });
 
   if (!item || item.userId !== authedReq.userId) {

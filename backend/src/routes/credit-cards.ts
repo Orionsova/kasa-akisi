@@ -91,7 +91,7 @@ creditCardsRouter.post('/', async (req, res) => {
 });
 
 creditCardsRouter.delete('/:id', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const card = await prisma.creditCard.findUnique({ where: { id: req.params.id } });
 
   if (!card || card.userId !== authedReq.userId) {
@@ -103,7 +103,7 @@ creditCardsRouter.delete('/:id', async (req, res) => {
 });
 
 creditCardsRouter.get('/score-history', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const history = await prisma.creditScoreSnapshot.findMany({
     where: { userId: authedReq.userId },
     orderBy: { createdAt: 'desc' },
@@ -114,7 +114,7 @@ creditCardsRouter.get('/score-history', async (req, res) => {
 });
 
 creditCardsRouter.post('/score-history', async (req, res) => {
-  const authedReq = req as AuthedRequest;
+  const authedReq = req as unknown as AuthedRequest;
   const input = scoreSnapshotSchema.parse(req.body);
   const snapshotId = input.id ?? `score_${crypto.randomUUID()}`;
   const existing = await prisma.creditScoreSnapshot.findUnique({

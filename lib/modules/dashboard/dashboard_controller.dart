@@ -46,6 +46,10 @@ class DashboardController extends BaseController {
   Future<void> deleteTransaction(String id) async {
     try {
       setLoading(true);
+      final transaction = transactions.firstWhereOrNull((item) => item.id == id);
+      if (transaction != null) {
+        await _revertCardEffect(transaction);
+      }
       await _transactionRepository.deleteTransaction(id);
       Get.snackbar(
         'Silindi',
@@ -68,7 +72,7 @@ class DashboardController extends BaseController {
       .fold(0, (sum, transaction) => sum + transaction.amount);
 
   double get totalExpense => transactions
-      .where((transaction) => !transaction.isIncome)
+      .where((transaction) => !transaction.isIncome && transaction.affectsCashBalance)
       .fold(0, (sum, transaction) => sum + transaction.amount);
 
   double get balance => totalIncome - totalExpense;
@@ -83,6 +87,41 @@ class DashboardController extends BaseController {
   double get totalInvestmentValue =>
       investments.fold(0, (sum, item) => sum + item.currentValue);
 
+  List<AppTransaction> get currentMonthTransactions {
+    final now = DateTime.now();
+    return transactions.where((transaction) {
+      return transaction.date.year == now.year &&
+          transaction.date.month == now.month;
+    }).toList();
+  }
+
+  List<AppTransaction> get currentMonthCardExpenses => currentMonthTransactions
+      .where((transaction) => transaction.isCardExpense)
+      .toList();
+
+  List<AppTransaction> get currentMonthCardPayments => currentMonthTransactions
+      .where((transaction) => transaction.isCardDebtPayment)
+      .toList();
+
+  double get currentMonthCardSpendingTotal => currentMonthCardExpenses.fold<double>(
+    0,
+    (sum, transaction) => sum + transaction.amount,
+  );
+
+  double get currentMonthCardPaymentTotal => currentMonthCardPayments.fold<double>(
+    0,
+    (sum, transaction) => sum + transaction.amount,
+  );
+
+  String cardLabelFor(String? cardId) {
+    if (cardId == null || cardId.trim().isEmpty) {
+      return 'Kart';
+    }
+
+    final card = cards.firstWhereOrNull((item) => item.id == cardId);
+    return card?.name ?? 'Kart';
+  }
+
   List<RecurringTransaction> get upcomingRecurring {
     final today = DateTime.now();
     return recurringTransactions.where((item) => item.dayOfMonth >= today.day).toList()
@@ -90,4 +129,20 @@ class DashboardController extends BaseController {
   }
 
   List<AppTransaction> get recentTransactions => transactions.take(5).toList();
+
+  Future<void> _revertCardEffect(AppTransaction transaction) async {
+    final cardId = transaction.selectedCardId;
+    if (cardId == null || cardId.trim().isEmpty) {
+      return;
+    }
+
+    if (transaction.isCardExpense) {
+      await _creditCardRepository.payCardDebt(cardId, transaction.amount);
+      return;
+    }
+
+    if (transaction.isCardDebtPayment) {
+      await _creditCardRepository.chargeCardPurchase(cardId, transaction.amount);
+    }
+  }
 }

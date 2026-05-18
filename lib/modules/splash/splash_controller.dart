@@ -7,21 +7,53 @@ import 'package:stategetx/services/pin_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 
 class SplashController extends BaseController {
+  final status = 'starting'.obs;
+  final message = RxnString();
+
   @override
   Future<void> onReady() async {
     super.onReady();
-    await checkTokenAndRedirect();
+    await bootstrapAccess();
+  }
+
+  Future<void> bootstrapAccess() async {
+    if (isLoading) return;
+
+    setLoading(true);
+    status.value = 'starting';
+    message.value = null;
+
+    try {
+      await checkTokenAndRedirect();
+    } finally {
+      setLoading(false);
+    }
   }
 
   Future<void> checkTokenAndRedirect() async {
     await waitForServices();
-    _warmUpBackend();
+
     final authService = Get.find<AuthService>();
     if (authService.hasStoredToken) {
-      final pinService = Get.find<PinService>();
-      Get.offAllNamed(pinService.hasPin ? AppRoutes.pin : AppRoutes.home);
-      authService.refreshSessionInBackground();
-      return;
+      status.value = 'connecting';
+      await _warmUpBackend();
+
+      status.value = 'authenticating';
+      try {
+        final user = await authService.validateStoredSession();
+        if (user == null) {
+          Get.offAllNamed(AppRoutes.login);
+          return;
+        }
+
+        final pinService = Get.find<PinService>();
+        Get.offAllNamed(AppRoutes.pin, arguments: !pinService.hasPin);
+        return;
+      } catch (e) {
+        status.value = 'error';
+        message.value = e.toString().replaceFirst('Exception: ', '');
+        return;
+      }
     }
 
     Get.offAllNamed(AppRoutes.login);
@@ -36,8 +68,8 @@ class SplashController extends BaseController {
     }
   }
 
-  void _warmUpBackend() {
+  Future<void> _warmUpBackend() async {
     final apiService = Get.find<ApiService>();
-    Future<void>.microtask(apiService.warmUpBackend);
+    await apiService.warmUpBackend();
   }
 }

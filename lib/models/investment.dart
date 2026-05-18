@@ -6,6 +6,8 @@ class InvestmentModel {
   final double currentValue;
   final double? maturityRate;
   final double? monthlyYield;
+  final int? termDays;
+  final DateTime? openedAt;
   final String? symbol;
   final String? note;
 
@@ -17,6 +19,8 @@ class InvestmentModel {
     required this.currentValue,
     this.maturityRate,
     this.monthlyYield,
+    this.termDays,
+    this.openedAt,
     this.symbol,
     this.note,
   });
@@ -36,6 +40,10 @@ class InvestmentModel {
       monthlyYield: json['monthlyYield'] == null
           ? null
           : (json['monthlyYield'] as num).toDouble(),
+      termDays: json['termDays'] as int?,
+      openedAt: json['openedAt'] == null
+          ? null
+          : DateTime.parse(json['openedAt']),
       symbol: json['symbol'],
       note: json['note'],
     );
@@ -50,6 +58,8 @@ class InvestmentModel {
       'currentValue': currentValue,
       'maturityRate': maturityRate,
       'monthlyYield': monthlyYield,
+      'termDays': termDays,
+      'openedAt': openedAt?.toIso8601String(),
       'symbol': symbol,
       'note': note,
     };

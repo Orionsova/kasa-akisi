@@ -73,7 +73,10 @@ class LoginController extends BaseController {
               );
 
       if (user != null) {
-        Get.offAllNamed(_pinService.hasPin ? AppRoutes.home : AppRoutes.pin, arguments: !_pinService.hasPin);
+        Get.offAllNamed(
+          AppRoutes.pin,
+          arguments: !_pinService.hasPin,
+        );
         return;
       }
 
@@ -95,7 +98,10 @@ class LoginController extends BaseController {
       setLoading(true);
       final user = await _authService.signInWithGoogle();
       if (user != null) {
-        Get.offAllNamed(_pinService.hasPin ? AppRoutes.home : AppRoutes.pin, arguments: !_pinService.hasPin);
+        Get.offAllNamed(
+          AppRoutes.pin,
+          arguments: !_pinService.hasPin,
+        );
         return;
       }
 

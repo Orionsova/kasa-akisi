@@ -428,7 +428,8 @@ class TransactionPage extends GetView<TransactionController> {
                       }
                     },
                   ),
-                  if (controller.creditCards.isNotEmpty)
+                  if (controller.creditCards.isNotEmpty &&
+                      controller.operationType.value == 'expense')
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Column(
@@ -691,6 +692,11 @@ class _TransactionCard extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (transaction.isCardExpense || transaction.isCardDebtPayment)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _TransactionBadge(transaction: transaction),
+                  ),
                 const SizedBox(height: 4),
                 Text(
                   AppFormatters.shortDate(transaction.date),
@@ -723,6 +729,35 @@ class _TransactionCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TransactionBadge extends StatelessWidget {
+  const _TransactionBadge({required this.transaction});
+
+  final AppTransaction transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isCardExpense = transaction.isCardExpense;
+    final Color tone = isCardExpense
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF1D4ED8);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        isCardExpense ? 'Karttan harcandı' : 'Kart borcu ödendi',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: tone,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

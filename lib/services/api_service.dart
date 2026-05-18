@@ -42,9 +42,14 @@ abstract class ApiConstants {
   static const String creditCardScoreHistory = "/credit-cards/score-history";
   static const String investments = "/investments";
   static const String recurringTransactions = "/recurring-transactions";
+  static const String marketOverview = "/market/overview";
 }
 
 class ApiService extends GetxService {
+  static const Duration _defaultConnectTimeout = Duration(seconds: 20);
+  static const Duration _defaultReceiveTimeout = Duration(seconds: 20);
+  static const int _maxRetryAttempts = 3;
+
   late StorageService _storageService;
   late Dio _dio;
 
@@ -53,8 +58,8 @@ class ApiService extends GetxService {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppRuntimeConfig.apiBaseUrl,
-        connectTimeout: Duration(seconds: 10),
-        receiveTimeout: Duration(seconds: 10),
+        connectTimeout: _defaultConnectTimeout,
+        receiveTimeout: _defaultReceiveTimeout,
         contentType: "application/json",
       ),
     );
@@ -81,12 +86,15 @@ class ApiService extends GetxService {
 
   Future<void> warmUpBackend() async {
     try {
-      await _dio.get(
-        ApiConstants.health,
-        options: Options(
-          sendTimeout: const Duration(seconds: 4),
-          receiveTimeout: const Duration(seconds: 4),
+      await _requestWithRetry(
+        () => _dio.get(
+          ApiConstants.health,
+          options: Options(
+            sendTimeout: const Duration(seconds: 6),
+            receiveTimeout: const Duration(seconds: 6),
+          ),
         ),
+        debugLabel: 'GET ${ApiConstants.health}',
       );
     } catch (e) {
       debugPrint('Backend warm-up skipped: $e');
@@ -98,16 +106,14 @@ class ApiService extends GetxService {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    try {
-      return await _dio.get(
+    return _requestWithRetry(
+      () => _dio.get(
         path,
         queryParameters: queryParameters,
         options: options,
-      );
-    } catch (e) {
-      debugPrint("Dio get error $e");
-      rethrow;
-    }
+      ),
+      debugLabel: 'GET $path',
+    );
   }
 
   Future<Response> post(
@@ -116,17 +122,15 @@ class ApiService extends GetxService {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    try {
-      return await _dio.post(
+    return _requestWithRetry(
+      () => _dio.post(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
-      );
-    } catch (e) {
-      debugPrint("Dio post error $e");
-      rethrow;
-    }
+      ),
+      debugLabel: 'POST $path',
+    );
   }
 
   Future<Response> put(
@@ -135,17 +139,15 @@ class ApiService extends GetxService {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    try {
-      return await _dio.put(
+    return _requestWithRetry(
+      () => _dio.put(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
-      );
-    } catch (e) {
-      debugPrint("Dio put error $e");
-      rethrow;
-    }
+      ),
+      debugLabel: 'PUT $path',
+    );
   }
 
   Future<Response> delete(
@@ -154,16 +156,51 @@ class ApiService extends GetxService {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    try {
-      return await _dio.delete(
+    return _requestWithRetry(
+      () => _dio.delete(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
-      );
-    } catch (e) {
-      debugPrint("Dio delete error $e");
-      rethrow;
+      ),
+      debugLabel: 'DELETE $path',
+    );
+  }
+
+  Future<Response<dynamic>> _requestWithRetry(
+    Future<Response<dynamic>> Function() request, {
+    required String debugLabel,
+  }) async {
+    DioException? lastException;
+
+    for (var attempt = 1; attempt <= _maxRetryAttempts; attempt++) {
+      try {
+        return await request();
+      } on DioException catch (error) {
+        lastException = error;
+        final shouldRetry = _shouldRetry(error) && attempt < _maxRetryAttempts;
+        debugPrint(
+          '$debugLabel failed on attempt $attempt/$_maxRetryAttempts: ${error.type}',
+        );
+
+        if (!shouldRetry) {
+          rethrow;
+        }
+
+        await Future<void>.delayed(Duration(seconds: attempt));
+      } catch (e) {
+        debugPrint('$debugLabel unexpected error: $e');
+        rethrow;
+      }
     }
+
+    throw lastException!;
+  }
+
+  bool _shouldRetry(DioException error) {
+    return error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError;
   }
 }

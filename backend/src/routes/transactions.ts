@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
@@ -7,6 +8,7 @@ import { serializeTransaction } from '../utils/serializers.js';
 export const transactionsRouter = Router();
 
 const transactionSchema = z.object({
+  id: z.string().trim().min(1).optional(),
   title: z.string().trim().min(1),
   description: z.string().trim().nullable().optional(),
   amount: z.number().positive(),
@@ -15,6 +17,7 @@ const transactionSchema = z.object({
   isIncome: z.boolean(),
   selectedCardId: z.string().trim().nullable().optional(),
   isInstallment: z.boolean().optional().default(false),
+  transactionType: z.string().trim().min(1).optional().default('standard'),
 });
 
 transactionsRouter.use(requireAuth);
@@ -32,20 +35,39 @@ transactionsRouter.get('/', async (req, res) => {
 transactionsRouter.post('/', async (req, res) => {
   const authedReq = req as unknown as AuthedRequest;
   const input = transactionSchema.parse(req.body);
-
-  const transaction = await prisma.transaction.create({
-    data: {
-      title: input.title,
-      description: input.description ?? null,
-      amount: input.amount,
-      category: input.category,
-      date: new Date(input.date),
-      isIncome: input.isIncome,
-      selectedCardId: input.selectedCardId ?? null,
-      isInstallment: input.isInstallment,
-      userId: authedReq.userId,
-    },
+  const transactionId = input.id ?? `txn_${crypto.randomUUID()}`;
+  const existing = await prisma.transaction.findUnique({
+    where: { id: transactionId },
   });
+
+  if (existing && existing.userId !== authedReq.userId) {
+    return res.status(403).json({ message: 'Bu işlem kaydı başka bir kullanıcıya ait' });
+  }
+
+  const payload = {
+    title: input.title,
+    description: input.description ?? null,
+    amount: input.amount,
+    category: input.category,
+    date: new Date(input.date),
+    isIncome: input.isIncome,
+    selectedCardId: input.selectedCardId ?? null,
+    isInstallment: input.isInstallment,
+    transactionType: input.transactionType,
+    userId: authedReq.userId,
+  };
+
+  const transaction = existing
+    ? await prisma.transaction.update({
+        where: { id: transactionId },
+        data: payload,
+      })
+    : await prisma.transaction.create({
+        data: {
+          id: transactionId,
+          ...payload,
+        },
+      });
 
   return res.status(201).json({
     transaction: serializeTransaction(transaction),

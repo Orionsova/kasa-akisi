@@ -169,6 +169,7 @@ class TransactionController extends BaseController {
           isIncome: false,
           selectedCardId: cardId,
           isInstallment: false,
+          transactionType: AppTransaction.typeCardDebtPayment,
         );
 
         await _transactionRepository.createTransaction(transaction);
@@ -211,11 +212,13 @@ class TransactionController extends BaseController {
         (cat) => cat.id == selectedCategoryId.value,
       );
 
-      final isCardPayment =
+      final usesCreditCard =
           paymentMethod.value != null &&
           paymentMethod.value != 'cash' &&
           paymentMethod.value != 'bank';
-      final selectedCardId = isCardPayment ? paymentMethod.value : null;
+      final isCardExpense =
+          operationType.value == 'expense' && usesCreditCard;
+      final selectedCardId = usesCreditCard ? paymentMethod.value : null;
 
       final newTransaction = AppTransaction(
         id: '',
@@ -227,10 +230,13 @@ class TransactionController extends BaseController {
         isIncome: operationType.value == 'income',
         selectedCardId: selectedCardId,
         isInstallment: false,
+        transactionType: isCardExpense
+            ? AppTransaction.typeCreditCardExpense
+            : AppTransaction.typeStandard,
       );
 
-      // Kredi kartından ödeme yapılıyorsa
-      if (isCardPayment) {
+      // Kredi kartıyla yapılan harcamalar nakit bakiyeyi değil sadece limiti etkiler.
+      if (isCardExpense) {
         final cardId = selectedCardId!;
         await _creditCardRepository.chargeCardPurchase(cardId, amount.value);
       }
@@ -258,6 +264,10 @@ class TransactionController extends BaseController {
   Future<void> deleteTransaction(String id) async {
     setLoading(true);
     try {
+      final transaction = transactions.firstWhereOrNull((item) => item.id == id);
+      if (transaction != null) {
+        await _revertCardEffect(transaction);
+      }
       await _transactionRepository.deleteTransaction(id);
       Get.snackbar(
         'Silindi',
@@ -333,6 +343,22 @@ class TransactionController extends BaseController {
       cardPaymentAmount.value = card.currentStatementDebt;
       cardPaymentAmountController.text = cardPaymentAmount.value
           .toStringAsFixed(2);
+    }
+  }
+
+  Future<void> _revertCardEffect(AppTransaction transaction) async {
+    final cardId = transaction.selectedCardId;
+    if (cardId == null || cardId.trim().isEmpty) {
+      return;
+    }
+
+    if (transaction.isCardExpense) {
+      await _creditCardRepository.payCardDebt(cardId, transaction.amount);
+      return;
+    }
+
+    if (transaction.isCardDebtPayment) {
+      await _creditCardRepository.chargeCardPurchase(cardId, transaction.amount);
     }
   }
 }

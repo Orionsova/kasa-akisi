@@ -19,6 +19,10 @@ class PinController extends BaseController {
     super.onInit();
     _pinService = Get.find<PinService>();
     _authService = Get.find<AuthService>();
+    if (_authService.currentUser.value == null) {
+      Future<void>.microtask(() => Get.offAllNamed(AppRoutes.login));
+      return;
+    }
     setupMode.value = Get.arguments == true || !_pinService.hasPin;
   }
 
@@ -30,6 +34,12 @@ class PinController extends BaseController {
   }
 
   Future<void> submit() async {
+    if (_authService.currentUser.value == null) {
+      errorText.value = 'Oturum doğrulanamadı. Lütfen tekrar giriş yap.';
+      Get.offAllNamed(AppRoutes.login);
+      return;
+    }
+
     final pin = pinController.text.trim();
     errorText.value = null;
 

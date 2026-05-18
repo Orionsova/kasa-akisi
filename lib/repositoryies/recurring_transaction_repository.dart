@@ -1,15 +1,19 @@
 import 'dart:convert';
 
 import 'package:get/get.dart';
+import 'package:stategetx/models/app_user.dart';
 import 'package:stategetx/models/recurring_transaction.dart';
 import 'package:stategetx/services/api_service.dart';
+import 'package:stategetx/services/auth_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 
 class RecurringTransactionRepository extends GetxService {
   static const String _legacyStorageKey = 'recurring_transactions';
+  static const String _legacyStorageOwnerKey = 'recurring_transactions_owner';
 
   late final ApiService _apiService;
   late final StorageService _storageService;
+  late final AuthService _authService;
 
   final RxList<RecurringTransaction> recurringTransactions =
       <RecurringTransaction>[].obs;
@@ -19,16 +23,21 @@ class RecurringTransactionRepository extends GetxService {
     super.onInit();
     _apiService = Get.find<ApiService>();
     _storageService = Get.find<StorageService>();
+    _authService = Get.find<AuthService>();
+    ever<AppUser?>(_authService.currentUser, (_) => loadRecurringTransactions());
     loadRecurringTransactions();
   }
 
   Future<void> loadRecurringTransactions() async {
+    if (_authService.currentUser.value == null) {
+      recurringTransactions.clear();
+      return;
+    }
+
     try {
       final response = await _apiService.get(ApiConstants.recurringTransactions);
       final decoded = response.data;
-      if (decoded is! List) {
-        recurringTransactions.clear();
-      } else {
+      if (decoded is List) {
         recurringTransactions.assignAll(
           decoded
               .whereType<Map>()
@@ -40,61 +49,114 @@ class RecurringTransactionRepository extends GetxService {
               .toList()
             ..sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth)),
         );
-      }
-
-      if (recurringTransactions.isEmpty) {
-        await _migrateLegacyRecurringIfNeeded();
+        await _persist();
+        return;
       }
     } catch (_) {
-      final decoded = _decodeLegacy(
-        _storageService.getValue<String>(_legacyStorageKey),
-      );
-      if (decoded.isEmpty) {
-        recurringTransactions.assignAll(_defaultRecurringTransactions());
-      } else {
-        recurringTransactions.assignAll(decoded);
-      }
+      // Fallback below.
     }
+
+    await _migrateLegacyRecurringIfNeeded();
+    recurringTransactions.assignAll(
+      _decode(_storageService.getValue<String>(_scopedStorageKey())),
+    );
+    recurringTransactions.sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth));
   }
 
   Future<void> addRecurringTransaction(RecurringTransaction transaction) async {
-    final response = await _apiService.post(
-      ApiConstants.recurringTransactions,
-      data: transaction.toJson(),
-    );
-    final saved = RecurringTransaction.fromJson(
-      Map<String, dynamic>.from(response.data),
-    );
-    final index = recurringTransactions.indexWhere((item) => item.id == saved.id);
-    if (index == -1) {
-      recurringTransactions.add(saved);
-    } else {
-      recurringTransactions[index] = saved;
+    try {
+      final response = await _apiService.post(
+        ApiConstants.recurringTransactions,
+        data: transaction.toJson(),
+      );
+      final saved = RecurringTransaction.fromJson(
+        Map<String, dynamic>.from(response.data),
+      );
+      final index = recurringTransactions.indexWhere((item) => item.id == saved.id);
+      if (index == -1) {
+        recurringTransactions.add(saved);
+      } else {
+        recurringTransactions[index] = saved;
+      }
+    } catch (_) {
+      final index = recurringTransactions.indexWhere(
+        (item) => item.id == transaction.id,
+      );
+      if (index == -1) {
+        recurringTransactions.add(transaction);
+      } else {
+        recurringTransactions[index] = transaction;
+      }
     }
+
     recurringTransactions.sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth));
+    await _persist();
   }
 
   Future<void> deleteRecurringTransaction(String id) async {
-    await _apiService.delete('${ApiConstants.recurringTransactions}/$id');
+    try {
+      await _apiService.delete('${ApiConstants.recurringTransactions}/$id');
+    } catch (_) {
+      // Keep local state consistent.
+    }
+
     recurringTransactions.removeWhere((item) => item.id == id);
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    await _storageService.setValue<String>(
+      _scopedStorageKey(),
+      jsonEncode(recurringTransactions.map((item) => item.toJson()).toList()),
+    );
   }
 
   Future<void> _migrateLegacyRecurringIfNeeded() async {
-    final decoded = _decodeLegacy(
+    if (_storageService.hasKey(_scopedStorageKey())) return;
+
+    final ownerKey = _currentUserStorageKey();
+    final legacyOwner = _storageService.getValue<String>(_legacyStorageOwnerKey);
+    if (legacyOwner != null && legacyOwner != ownerKey) {
+      return;
+    }
+
+    final decoded = _decode(
       _storageService.getValue<String>(_legacyStorageKey),
     );
-    final items = decoded.isNotEmpty ? decoded : _defaultRecurringTransactions();
-    for (final item in items) {
-      await _apiService.post(
-        ApiConstants.recurringTransactions,
-        data: item.toJson(),
-      );
+    if (decoded.isEmpty) return;
+
+    for (final item in decoded) {
+      try {
+        await _apiService.post(
+          ApiConstants.recurringTransactions,
+          data: item.toJson(),
+        );
+      } catch (_) {
+        // Continue seeding what we can.
+      }
     }
-    recurringTransactions.assignAll(items);
-    recurringTransactions.sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth));
+
+    await _storageService.setValue<String>(
+      _scopedStorageKey(),
+      jsonEncode(decoded.map((item) => item.toJson()).toList()),
+    );
+    await _storageService.setValue<String>(_legacyStorageOwnerKey, ownerKey);
   }
 
-  List<RecurringTransaction> _decodeLegacy(String? rawValue) {
+  String _scopedStorageKey() =>
+      'recurring_transactions_${_currentUserStorageKey()}';
+
+  String _currentUserStorageKey() {
+    final user = _authService.currentUser.value;
+    final userId = user?.id?.trim();
+    final email = user?.email?.trim().toLowerCase();
+    final base = userId != null && userId.isNotEmpty
+        ? userId
+        : (email != null && email.isNotEmpty ? email : 'anonymous');
+    return base.replaceAll(RegExp(r'[^a-zA-Z0-9_\-@.]'), '_');
+  }
+
+  List<RecurringTransaction> _decode(String? rawValue) {
     if (rawValue == null || rawValue.isEmpty) {
       return <RecurringTransaction>[];
     }
@@ -108,31 +170,5 @@ class RecurringTransactionRepository extends GetxService {
         )
         .toList()
       ..sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth));
-  }
-
-  List<RecurringTransaction> _defaultRecurringTransactions() {
-    final now = DateTime.now();
-    return [
-      RecurringTransaction(
-        id: 'default-salary',
-        title: 'Maaş',
-        category: 'Gelir',
-        amount: 45000,
-        dayOfMonth: 1,
-        isIncome: true,
-        isSubscription: false,
-        startDate: DateTime(now.year, now.month, 1),
-      ),
-      RecurringTransaction(
-        id: 'default-netflix',
-        title: 'Netflix',
-        category: 'Abonelik',
-        amount: 229.99,
-        dayOfMonth: 12,
-        isIncome: false,
-        isSubscription: true,
-        startDate: DateTime(now.year, now.month, 12),
-      ),
-    ];
   }
 }

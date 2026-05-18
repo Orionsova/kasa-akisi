@@ -10,6 +10,85 @@ import 'package:stategetx/themes/app_colors.dart';
 class DashboardPage extends GetView<DashboardController> {
   const DashboardPage({super.key});
 
+  void _showCardActivitySheet(
+    BuildContext context, {
+    required String title,
+    required String emptyTitle,
+    required String emptySubtitle,
+    required List<AppTransaction> transactions,
+  }) {
+    final theme = Theme.of(context);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  AppFormatters.monthLabel(DateTime.now()),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (transactions.isEmpty)
+                  _EmptyInfoCard(
+                    title: emptyTitle,
+                    subtitle: emptySubtitle,
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: transactions.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) => _CardActivityTile(
+                        transaction: transactions[index],
+                        cardLabel: controller.cardLabelFor(
+                          transactions[index].selectedCardId,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -59,6 +138,51 @@ class DashboardPage extends GetView<DashboardController> {
                     value: AppFormatters.currency(controller.totalExpense),
                     icon: Icons.north_east_rounded,
                     accent: AppColors.error,
+                    subtitle: 'Bakiyeden çıkan',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _SummaryCard(
+                    title: 'Kart harcaması',
+                    value: AppFormatters.currency(
+                      controller.currentMonthCardSpendingTotal,
+                    ),
+                    icon: Icons.credit_card_rounded,
+                    accent: const Color(0xFF0F766E),
+                    subtitle: 'Bu ay limiti kullandın',
+                    onTap: () => _showCardActivitySheet(
+                      context,
+                      title: 'Bu Ay Kart Harcamaları',
+                      emptyTitle: 'Kart harcaması yok',
+                      emptySubtitle:
+                          'Bu ay kredi kartıyla yapılan harcamalar burada listelenecek.',
+                      transactions: controller.currentMonthCardExpenses,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _SummaryCard(
+                    title: 'Kart ödemesi',
+                    value: AppFormatters.currency(
+                      controller.currentMonthCardPaymentTotal,
+                    ),
+                    icon: Icons.account_balance_wallet_rounded,
+                    accent: const Color(0xFF1D4ED8),
+                    subtitle: 'Bu ay karta yatırdın',
+                    onTap: () => _showCardActivitySheet(
+                      context,
+                      title: 'Bu Ay Kart Ödemeleri',
+                      emptyTitle: 'Kart ödemesi yok',
+                      emptySubtitle:
+                          'Bu ay kart borcu için yapılan ödemeler burada listelenecek.',
+                      transactions: controller.currentMonthCardPayments,
+                    ),
                   ),
                 ),
               ],
@@ -70,8 +194,9 @@ class DashboardPage extends GetView<DashboardController> {
                   child: _SummaryCard(
                     title: 'Kart borcu',
                     value: AppFormatters.currency(controller.totalCardDebt),
-                    icon: Icons.credit_card_rounded,
-                    accent: const Color(0xFF0F766E),
+                    icon: Icons.receipt_long_rounded,
+                    accent: const Color(0xFF7C2D12),
+                    subtitle: 'Toplam açık bakiye',
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -81,6 +206,7 @@ class DashboardPage extends GetView<DashboardController> {
                     value: AppFormatters.currency(controller.totalInvestmentValue),
                     icon: Icons.trending_up_rounded,
                     accent: const Color(0xFF7C3AED),
+                    subtitle: 'Güncel portföy',
                   ),
                 ),
               ],
@@ -295,51 +421,74 @@ class _SummaryCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.accent,
+    this.subtitle,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final IconData icon;
   final Color accent;
+  final String? subtitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: accent),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 6),
-          CurrencyText(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
+        child: Ink(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: colorScheme.outline.withValues(alpha: 0.08),
             ),
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 6),
+              CurrencyText(
+                value,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -460,6 +609,11 @@ class _TransactionTile extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (transaction.isCardExpense || transaction.isCardDebtPayment)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: _CardFlowBadge(transaction: transaction),
+                ),
               if (transaction.description?.isNotEmpty ?? false)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -501,6 +655,120 @@ class _TransactionTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CardFlowBadge extends StatelessWidget {
+  const _CardFlowBadge({required this.transaction});
+
+  final AppTransaction transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isExpense = transaction.isCardExpense;
+    final Color tone = isExpense
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF1D4ED8);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        isExpense ? 'Kart harcaması' : 'Kart borcu ödemesi',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: tone,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _CardActivityTile extends StatelessWidget {
+  const _CardActivityTile({
+    required this.transaction,
+    required this.cardLabel,
+  });
+
+  final AppTransaction transaction;
+  final String cardLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bool isExpense = transaction.isCardExpense;
+    final Color tone = isExpense
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF1D4ED8);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              isExpense
+                  ? Icons.credit_card_rounded
+                  : Icons.account_balance_wallet_rounded,
+              color: tone,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$cardLabel • ${transaction.category}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  AppFormatters.shortDate(transaction.date),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          CurrencyText(
+            AppFormatters.currency(transaction.amount),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: tone,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -2,17 +2,22 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:get/get.dart';
+import 'package:stategetx/models/app_user.dart';
 import 'package:stategetx/models/credit_card.dart';
 import 'package:stategetx/models/credit_score_snapshot.dart';
 import 'package:stategetx/services/api_service.dart';
+import 'package:stategetx/services/auth_service.dart';
 import 'package:stategetx/services/storage_service.dart';
 
 class CreditCardRepository extends GetxService {
   static const String _legacyStorageKey = 'credit_cards';
   static const String _legacyScoreHistoryStorageKey = 'credit_card_score_history';
+  static const String _legacyStorageOwnerKey = 'credit_cards_owner';
+  static const String _legacyScoreOwnerKey = 'credit_card_score_history_owner';
 
   late final ApiService _apiService;
   late final StorageService _storageService;
+  late final AuthService _authService;
 
   final RxList<CreditCardModel> cards = <CreditCardModel>[].obs;
   final RxList<CreditScoreSnapshot> scoreHistory = <CreditScoreSnapshot>[].obs;
@@ -22,10 +27,18 @@ class CreditCardRepository extends GetxService {
     super.onInit();
     _apiService = Get.find<ApiService>();
     _storageService = Get.find<StorageService>();
+    _authService = Get.find<AuthService>();
+    ever<AppUser?>(_authService.currentUser, (_) => loadCards());
     loadCards();
   }
 
   Future<void> loadCards() async {
+    if (_authService.currentUser.value == null) {
+      cards.clear();
+      scoreHistory.clear();
+      return;
+    }
+
     await _loadScoreHistory();
 
     try {
@@ -60,19 +73,27 @@ class CreditCardRepository extends GetxService {
   Future<void> addCard(CreditCardModel card) => saveCard(card);
 
   Future<void> saveCard(CreditCardModel card) async {
-    final response = await _apiService.post(
-      ApiConstants.creditCards,
-      data: card.toJson(),
-    );
-    final saved = CreditCardModel.fromJson(
-      Map<String, dynamic>.from(response.data),
-    );
+    CreditCardModel saved = card;
+
+    try {
+      final response = await _apiService.post(
+        ApiConstants.creditCards,
+        data: card.toJson(),
+      );
+      saved = CreditCardModel.fromJson(
+        Map<String, dynamic>.from(response.data),
+      );
+    } on DioException catch (_) {
+      // Keep the app usable when the remote credit-card API is not deployed yet.
+    }
+
     final index = cards.indexWhere((item) => item.id == saved.id);
     if (index == -1) {
       cards.add(saved);
     } else {
       cards[index] = saved;
     }
+    await _persistCards();
     await _recordScoreSnapshotIfNeeded();
   }
 
@@ -141,8 +162,13 @@ class CreditCardRepository extends GetxService {
   }
 
   Future<void> deleteCard(String id) async {
-    await _apiService.delete('${ApiConstants.creditCards}/$id');
+    try {
+      await _apiService.delete('${ApiConstants.creditCards}/$id');
+    } on DioException catch (_) {
+      // Preserve local behavior when backend route is unavailable.
+    }
     cards.removeWhere((item) => item.id == id);
+    await _persistCards();
     await _recordScoreSnapshotIfNeeded();
   }
 
@@ -166,6 +192,7 @@ class CreditCardRepository extends GetxService {
             .toList()
           ..sort((left, right) => right.createdAt.compareTo(left.createdAt)),
       );
+      await _persistScoreHistory();
     } catch (_) {
       scoreHistory.clear();
     }
@@ -208,13 +235,15 @@ class CreditCardRepository extends GetxService {
       scoreHistory.removeRange(24, scoreHistory.length);
     }
 
+    await _persistScoreHistory();
+
     try {
       await _apiService.post(
         ApiConstants.creditCardScoreHistory,
         data: snapshot.toJson(),
       );
     } on DioException {
-      // Ignore transient sync failures; in-memory score remains usable.
+      // Keep local score timeline usable on transient API failures.
     }
   }
 
@@ -224,20 +253,38 @@ class CreditCardRepository extends GetxService {
     return (100 - (ratio * 100)).round().clamp(0, 100).toInt();
   }
 
+  Future<void> _persistCards() async {
+    await _storageService.setValue<String>(
+      _scopedCardsStorageKey(),
+      jsonEncode(cards.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<void> _persistScoreHistory() async {
+    await _storageService.setValue<String>(
+      _scopedScoreStorageKey(),
+      jsonEncode(scoreHistory.map((item) => item.toJson()).toList()),
+    );
+  }
+
   Future<void> _migrateLegacyCardsIfNeeded() async {
+    final ownerKey = _currentUserStorageKey();
     final rawValue = _storageService.getValue<String>(_legacyStorageKey);
     final migratedCards = _decodeCards(rawValue);
     final cardsToSeed = migratedCards.isNotEmpty ? migratedCards : _defaultCards();
 
     for (final card in cardsToSeed) {
-      await _apiService.post(ApiConstants.creditCards, data: card.toJson());
+      try {
+        await _apiService.post(ApiConstants.creditCards, data: card.toJson());
+      } on DioException catch (_) {
+        // Continue with local seed when backend route is unavailable.
+      }
     }
 
-    final rawScores = _storageService.getValue<String>(
-      _legacyScoreHistoryStorageKey,
+    final legacyScores = _decodeScores(
+      _storageService.getValue<String>(_legacyScoreHistoryStorageKey),
     );
-    final migratedScores = _decodeScores(rawScores);
-    for (final item in migratedScores) {
+    for (final item in legacyScores) {
       await _apiService.post(
         ApiConstants.creditCardScoreHistory,
         data: item.toJson(),
@@ -245,9 +292,13 @@ class CreditCardRepository extends GetxService {
     }
 
     cards.assignAll(cardsToSeed);
-    if (migratedScores.isNotEmpty) {
-      scoreHistory.assignAll(migratedScores);
+    if (legacyScores.isNotEmpty) {
+      scoreHistory.assignAll(legacyScores);
     }
+    await _persistCards();
+    await _persistScoreHistory();
+    await _storageService.setValue<String>(_legacyStorageOwnerKey, ownerKey);
+    await _storageService.setValue<String>(_legacyScoreOwnerKey, ownerKey);
     await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
   }
 
@@ -258,6 +309,7 @@ class CreditCardRepository extends GetxService {
     } else {
       cards.assignAll(decoded);
     }
+    await _persistCards();
     await _recordScoreSnapshotIfNeeded(forceIfEmpty: true);
   }
 
@@ -267,7 +319,24 @@ class CreditCardRepository extends GetxService {
     );
     if (decoded.isNotEmpty) {
       scoreHistory.assignAll(decoded);
+      await _persistScoreHistory();
     }
+  }
+
+  String _scopedCardsStorageKey() =>
+      'credit_cards_${_currentUserStorageKey()}';
+
+  String _scopedScoreStorageKey() =>
+      'credit_card_score_history_${_currentUserStorageKey()}';
+
+  String _currentUserStorageKey() {
+    final user = _authService.currentUser.value;
+    final userId = user?.id?.trim();
+    final email = user?.email?.trim().toLowerCase();
+    final base = userId != null && userId.isNotEmpty
+        ? userId
+        : (email != null && email.isNotEmpty ? email : 'anonymous');
+    return base.replaceAll(RegExp(r'[^a-zA-Z0-9_\-@.]'), '_');
   }
 
   List<CreditCardModel> _decodeCards(String? rawValue) {

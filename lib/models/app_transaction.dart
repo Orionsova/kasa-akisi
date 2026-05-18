@@ -1,4 +1,8 @@
 class AppTransaction {
+  static const String typeStandard = 'standard';
+  static const String typeCreditCardExpense = 'credit-card-expense';
+  static const String typeCardDebtPayment = 'card-debt-payment';
+
   final String id;
   final String title;
   final String? description;
@@ -8,6 +12,7 @@ class AppTransaction {
   final bool isIncome;
   final String? selectedCardId;
   final bool isInstallment;
+  final String transactionType;
 
   AppTransaction({
     required this.id,
@@ -19,6 +24,7 @@ class AppTransaction {
     required this.isIncome,
     this.selectedCardId,
     this.isInstallment = false,
+    this.transactionType = typeStandard,
   });
 
   factory AppTransaction.fromJson(Map<String, dynamic> json) {
@@ -32,6 +38,7 @@ class AppTransaction {
       isIncome: json['isIncome'] ?? false,
       selectedCardId: json['selectedCardId'],
       isInstallment: json['isInstallment'] ?? false,
+      transactionType: _resolveTransactionType(json),
     );
   }
 
@@ -46,6 +53,7 @@ class AppTransaction {
       'isIncome': isIncome,
       'selectedCardId': selectedCardId,
       'isInstallment': isInstallment,
+      'transactionType': transactionType,
     };
   }
 
@@ -59,6 +67,7 @@ class AppTransaction {
     bool? isIncome,
     String? selectedCardId,
     bool? isInstallment,
+    String? transactionType,
   }) {
     return AppTransaction(
       id: id ?? this.id,
@@ -70,6 +79,34 @@ class AppTransaction {
       isIncome: isIncome ?? this.isIncome,
       selectedCardId: selectedCardId ?? this.selectedCardId,
       isInstallment: isInstallment ?? this.isInstallment,
+      transactionType: transactionType ?? this.transactionType,
     );
+  }
+
+  bool get isCardExpense => transactionType == typeCreditCardExpense;
+
+  bool get isCardDebtPayment => transactionType == typeCardDebtPayment;
+
+  bool get affectsCashBalance => isIncome || !isCardExpense;
+
+  static String _resolveTransactionType(Map<String, dynamic> json) {
+    final storedType = json['transactionType']?.toString().trim();
+    if (storedType != null && storedType.isNotEmpty) {
+      return storedType;
+    }
+
+    final isIncome = json['isIncome'] ?? false;
+    final selectedCardId = json['selectedCardId']?.toString().trim();
+    final category = json['category']?.toString().trim() ?? '';
+
+    if (!isIncome && category == 'Kart Borcu Ödeme') {
+      return typeCardDebtPayment;
+    }
+
+    if (!isIncome && selectedCardId != null && selectedCardId.isNotEmpty) {
+      return typeCreditCardExpense;
+    }
+
+    return typeStandard;
   }
 }
